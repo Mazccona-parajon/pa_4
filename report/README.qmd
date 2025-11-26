@@ -1,0 +1,210 @@
+---
+title: 'Programming assignment 4'
+output: github_document
+---
+
+**Author**: Maricruz Azcona-Parajon
+**Date**: Last update: `r Sys.time()`
+
+# Overview
+
+For this assignment, I analyze productions of Spanish-like nonce words produced by bilingual speakers and L2 learners. The targets are paroxytones with voiceless stops and all five Spanish oral vowels.
+
+**Hypothesis.** Because these recordings are productions of Spanish-like nonce words containing voiceless stops and all five Spanish oral vowels, bilingual speakers will produce more target-like Spanish segmental patterns than the L2 learners. Specifically, bilinguals are expected to show shorter, more consistent VOT values for /p t k/ and clearer, more peripheral vowel formant patterns in F1–F2 space. In contrast, L2 learners are expected to produce longer, more English-like VOTs and more centralized, less distinct vowel qualities, with greater variability across repetitions. The vowels for each speaker should reflect that speaker's dominant language. Overall, the acoustic measures of VOT and formants should reveal more native-like stability in the bilinguals and more L1-influenced variability in the L2 learners.
+
+# Prep
+
+## Libraries
+
+```{r}
+#| label: load-libs
+#| echo: false 
+#| warning: false 
+#| message: false
+
+# Load libraries here
+library(tidyverse)
+library(here)
+library(knitr)
+```
+
+## Load data
+
+```{r}
+#| label: load-data
+
+# Get all CSV files from the data directory
+# Your structure: Desktop/pa_4/data/
+data_files <- list.files(path = here("data"), 
+                         pattern = "\\.csv$", 
+                         full.names = TRUE)
+
+# Read and combine all data files
+# This will combine: bi01.csv, bi02.csv, bi03.csv, ne01.csv, ne02.csv, ne03.csv
+df <- data_files %>%
+  map_df(read_csv, show_col_types = FALSE)
+
+# If you want to keep track of which file each row came from:
+# df <- data_files %>%
+#   map_df(~ read_csv(.x, show_col_types = FALSE) %>%
+#            mutate(file = basename(.x)), .id = "source")
+```
+
+## Tidy data
+
+```{r}
+#| label: tidy-data
+
+# Create a participant group variable based on filename
+# bi = bilingual, ne = L2 learner
+df <- df %>%
+  mutate(
+    group = case_when(
+      str_detect(file, "^bi") ~ "Bilingual",
+      str_detect(file, "^ne") ~ "L2_Learner",
+      TRUE ~ NA_character_
+    ),
+    participant = str_extract(file, "^[a-z]{2}\\d{2}")
+  )
+
+# If you need to convert from wide to long format for vowel formants:
+# df_long <- df %>%
+#   pivot_longer(cols = c(f1, f2, f3), 
+#                names_to = "formant", 
+#                values_to = "hz")
+
+# If you need separate variables for consonant and vowel:
+# df <- df %>%
+#   mutate(
+#     consonant = str_extract(item, "[ptk]"),
+#     vowel = str_extract(item, "[aeiou]")
+#   )
+```
+
+# Analysis
+
+## Descriptives
+
+```{r}
+#| label: descriptive-stats
+
+# VOT descriptive statistics by group
+vot_stats <- df %>%
+  group_by(group) %>%
+  summarise(
+    n = n(),
+    mean_vot = mean(vot, na.rm = TRUE),
+    sd_vot = sd(vot, na.rm = TRUE),
+    min_vot = min(vot, na.rm = TRUE),
+    max_vot = max(vot, na.rm = TRUE)
+  )
+
+kable(vot_stats, 
+      digits = 2,
+      caption = "VOT Descriptive Statistics by Speaker Group")
+
+# Formant descriptive statistics by group and vowel
+formant_stats <- df %>%
+  group_by(group, vowel) %>%
+  summarise(
+    n = n(),
+    mean_f1 = mean(f1, na.rm = TRUE),
+    sd_f1 = sd(f1, na.rm = TRUE),
+    mean_f2 = mean(f2, na.rm = TRUE),
+    sd_f2 = sd(f2, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+kable(formant_stats, 
+      digits = 2,
+      caption = "Formant Descriptive Statistics by Group and Vowel")
+```
+
+## Visualization
+
+```{r}
+#| label: plots 
+#| fig.retina: 2
+
+# VOT by group
+ggplot(df, aes(x = group, y = vot, fill = group)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.3) +
+  theme_minimal() +
+  labs(title = "VOT Distribution by Speaker Group",
+       x = "Speaker Group",
+       y = "VOT (ms)") +
+  theme(legend.position = "none")
+
+# Vowel space plot (F1 vs F2)
+ggplot(df, aes(x = f2, y = f1, color = vowel, shape = group)) +
+  geom_point(size = 3, alpha = 0.6) +
+  scale_x_reverse() +
+  scale_y_reverse() +
+  theme_minimal() +
+  labs(title = "Vowel Space: F1 vs F2 by Group",
+       x = "F2 (Hz)",
+       y = "F1 (Hz)",
+       color = "Vowel",
+       shape = "Group")
+```
+
+<!-- Praat figure example -->
+
+**Figure 1**: Example acoustic analysis from Praat
+
+```{r}
+#| label: praat-figure
+#| echo: false
+#| out.width: "80%"
+#| fig.align: "center"
+
+# Include Praat-generated figure
+# Assumes image is in 'figs' or 'figures' folder
+knitr::include_graphics(here("figs", "praat_spectrogram.png"))
+
+# Alternative paths depending on your project structure:
+# knitr::include_graphics(here("figures", "praat_analysis.png"))
+# knitr::include_graphics(here("images", "acoustic_plot.png"))
+```
+
+## Hypothesis test
+
+```{r}
+#| label: stats
+
+# Test for VOT differences between groups
+vot_model <- lm(vot ~ group, data = df)
+summary(vot_model)
+
+# Alternative: t-test for VOT
+# vot_test <- t.test(vot ~ group, data = df)
+# print(vot_test)
+
+# Test for formant differences (F1)
+f1_model <- lm(f1 ~ group * vowel, data = df)
+summary(f1_model)
+
+# Test for formant differences (F2)
+f2_model <- lm(f2 ~ group * vowel, data = df)
+summary(f2_model)
+```
+
+# Conclusion
+
+<!-- 
+Revisit your hypotheses (refer to plots, figures, tables, statistical tests, 
+etc.)
+Reflect on the entire process. 
+What did you enjoy? What did you hate? What did you learn? 
+What would you do differently?
+-->
+
+Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod
+tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam,
+quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse
+cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non
+proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+</br></br>

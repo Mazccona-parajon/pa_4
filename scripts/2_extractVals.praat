@@ -70,7 +70,7 @@ numberOfFiles = Get number of strings
 # Start loop ------------------------------------------------------------
 #
 
-#for file to numberOfFiles
+for file to numberOfFiles
 	select Strings dirFiles
 	fileName$ = Get string: file
 	prefix$ = fileName$ - ".wav"
