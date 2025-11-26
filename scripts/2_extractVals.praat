@@ -7,15 +7,13 @@
 #  - extract vot, f1, f2 and       #
 #  - save output to ./data dir     #
 ####################################
-
-
 #
 # Set some parameters ---------------------------------------------------
 #
 
 # Which participant?
 form Select a participant
-	sentence fileID bi01
+sentence fileID bi01
 endform
 
 # Where to save data
@@ -42,7 +40,7 @@ filePath$ = "../recordings/"+fileID$+"/wavs/"
 filedelete 'outputDir$'/'outFile$'
 
 # Create newfile with header
-fileappend 'outputDir$'/'outFile$' fileID,f1,f2,vot,notes'newline$'
+fileappend 'outputDir$'/'outFile$' fileID,vowel,f1,f2,vot,notes'newline$'
 
 # -----------------------------------------------------------------------
 
@@ -71,49 +69,71 @@ numberOfFiles = Get number of strings
 #
 
 for file to numberOfFiles
-	select Strings dirFiles
-	fileName$ = Get string: file
-	prefix$ = fileName$ - ".wav"
-	Read from file... 'filePath$'/'prefix$'.wav
-	Read from file... 'filePath$'/'prefix$'.TextGrid
-	points = Get number of points... 1
-	labels = Count labels: 4, "exclude"
-	labID$ = Get label of interval: 4, 1
+select Strings dirFiles
+fileName$ = Get string: file
+prefix$ = fileName$ - ".wav"
 
-	if labels = 0
+# Extract vowel from filename (e.g., bi01_kaka.wav -> "a")
+# The vowel is the 3rd character in the CVCV pattern after the underscore
+underscore_pos = index(prefix$, "_")
+if underscore_pos > 0
+    after_underscore$ = mid$(prefix$, underscore_pos + 1, length(prefix$))
+    # Get the second character (first vowel in CVCV)
+    if length(after_underscore$) >= 2
+        vowel$ = mid$(after_underscore$, 2, 1)
+    else
+        vowel$ = "unknown"
+    endif
+else
+    vowel$ = "unknown"
+endif
 
-		# Calculate vot 
-		if points = 1
-		voicing = Get time of point... 2 1
-		release = Get time of point... 1 1
-		vot = (voicing - release) * 1000
-		window = release + 0.025
+Read from file... 'filePath$'/'prefix$'.wav
+Read from file... 'filePath$'/'prefix$'.TextGrid
 
-		# Calculate mid-point of vowel 
-		vowelStart = Get start point: 3, 2
-		vowelEnd  = Get end point: 3, 3
-		durationV =  vowelEnd - vowelStart
-		mp = vowelStart + (durationV * 0.50)
+# Add vowel label to tier 4
+select TextGrid 'prefix$'
+intervals = Get number of intervals: 4
+if intervals > 0
+    # Label the first interval in tier 4 with the vowel
+    Set interval text: 4, 1, vowel$
+    # Save the modified TextGrid
+    Save as text file: "'filePath$'/'prefix$'.TextGrid"
+endif
 
-		# Get formants
-		select Sound 'prefix$'
-		do ("To Formant (burg)...", 0, 5, 5500, 0.025, 50)
-		f1 = do ("Get value at time...", 1, mp, "Hertz", "Linear")
-		f2 = do ("Get value at time...", 2, mp, "Hertz", "Linear")
+points = Get number of points... 1
 
-	endif
+# Calculate vot 
+if points >= 1
+    voicing = Get time of point... 2 1
+    release = Get time of point... 1 1
+    vot = (voicing - release) * 1000
+    window = release + 0.025
 
-	# Append data to output 
-	fileappend 'outputDir$'/'fileID$'.csv 'prefix$','f1:2','f2:2','vot:2','labID$''newline$'
+    # Calculate mid-point of vowel 
+    vowelStart = Get start point: 3, 2
+    vowelEnd  = Get end point: 3, 3
+    durationV =  vowelEnd - vowelStart
+    mp = vowelStart + (durationV * 0.50)
 
-	# Printline for bug fixes
-	printline 'prefix$','f1:2','f2:2','vot:2','labID$'
+    # Get formants
+    select Sound 'prefix$'
+    do ("To Formant (burg)...", 0, 5, 5500, 0.025, 50)
+    f1 = do ("Get value at time...", 1, mp, "Hertz", "Linear")
+    f2 = do ("Get value at time...", 2, mp, "Hertz", "Linear")
 
-	# Clean up
-	select all
-	minus Strings dirFiles
-	Remove
-	endif
+    # Append data to output 
+    fileappend 'outputDir$'/'fileID$'.csv 'prefix$','vowel$','f1:2','f2:2','vot:2',''newline$'
+
+    # Printline for bug fixes
+    printline 'prefix$','vowel$','f1:2','f2:2','vot:2'
+endif
+
+# Clean up
+select all
+minus Strings dirFiles
+Remove
+
 endfor
 
 # -----------------------------------------------------------------------

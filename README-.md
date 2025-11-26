@@ -2,7 +2,7 @@ Programming assignment 4
 ================
 
 **Author**: Maricruz Azcona-Parajon  
-**Date**: Last update: 2025-11-25 22:35:39.824051
+**Date**: Last update: 2025-11-26 05:12:59.219046
 
 # Overview
 
@@ -30,144 +30,54 @@ more L1-influenced variability in the L2 learners.
 ## Load data
 
 ``` r
-# Print current working directory
-print(paste("Current working directory:", getwd()))
-```
-
-    ## [1] "Current working directory: /Users/mari_azcona/Desktop/pa_4"
-
-``` r
-# Check if data folder exists
-if(!dir.exists("data")) {
-  stop("The 'data' folder does not exist in the current directory. 
-       Make sure your .Rmd file is in the pa_4 folder.")
-}
-
 # Get all CSV files from the data directory
-data_files <- list.files(path = "data", 
+# Your structure: Desktop/pa_4/data/
+data_files <- list.files(path = here("data"), 
                          pattern = "\\.csv$", 
                          full.names = TRUE)
 
-# Check if files were found
-if(length(data_files) == 0) {
-  # Try to see what IS in the data folder
-  all_files <- list.files("data")
-  print("Files in data folder:")
-  print(all_files)
-  stop("No CSV files found in data directory")
-}
+# Read and combine all data files
+# This will combine: bi01.csv, bi02.csv, bi03.csv, ne01.csv, ne02.csv, ne03.csv
+df <- data_files %>%
+  map_df(read_csv, show_col_types = FALSE)
 
-print(paste("Found", length(data_files), "files"))
+# If you want to keep track of which file each row came from:
+# df <- data_files %>%
+#   map_df(~ read_csv(.x, show_col_types = FALSE) %>%
+#            mutate(file = basename(.x)), .id = "source")
 ```
-
-    ## [1] "Found 6 files"
-
-``` r
-print(data_files)
-```
-
-    ## [1] "data/bi01.csv" "data/bi02.csv" "data/bi03.csv" "data/ne01.csv"
-    ## [5] "data/ne02.csv" "data/ne03.csv"
-
-``` r
-# Read each file and add filename column
-data_list <- list()
-for(i in seq_along(data_files)) {
-  temp_data <- read_csv(data_files[i], show_col_types = FALSE)
-  temp_data$filename <- basename(data_files[i])
-  data_list[[i]] <- temp_data
-}
-
-# Combine all data
-my_data <- bind_rows(data_list)
-
-# View the structure to see what columns we have
-print("Column names:")
-```
-
-    ## [1] "Column names:"
-
-``` r
-print(colnames(my_data))
-```
-
-    ## [1] "fileID"   "f1"       "f2"       "vot"      "notes"    "filename"
-
-``` r
-glimpse(my_data)
-```
-
-    ## Rows: 269
-    ## Columns: 6
-    ## $ fileID   <chr> "bi01_kaka", "bi01_kaka1", "bi01_kaka2", "bi01_keke", "bi01_k…
-    ## $ f1       <dbl> 650.90, 714.32, 709.19, 495.24, 893.01, 579.31, 823.90, 348.2…
-    ## $ f2       <dbl> 1637.02, 1567.58, 1560.03, 2168.42, 2152.98, 2339.40, 2711.97…
-    ## $ vot      <dbl> 24.81, 25.49, 28.29, 31.55, 32.39, 32.87, 18.54, 52.80, 50.48…
-    ## $ notes    <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, "erro…
-    ## $ filename <chr> "bi01.csv", "bi01.csv", "bi01.csv", "bi01.csv", "bi01.csv", "…
 
 ## Tidy data
 
 ``` r
-# Check if filename column exists
-if(!"filename" %in% colnames(my_data)) {
-  stop("Error: filename column not found. Check the load-data chunk.")
-}
-
 # Create a participant group variable based on filename
 # bi = bilingual, ne = L2 learner
-my_data <- my_data %>%
+df <- df %>%
+  separate(fileID, into = c("id", "item"), sep = "_") |> 
   mutate(
-    group = case_when(
-      str_detect(filename, "^bi") ~ "Bilingual",
-      str_detect(filename, "^ne") ~ "L2_Learner",
-      TRUE ~ NA_character_
-    ),
-    participant = str_extract(filename, "^[a-z]{2}\\d{2}"),
-    # Rename 'notes' to 'vowel' for clarity
-    vowel = notes
+    group = if_else(str_detect(id, "bi"), "bilingual", "native_en"), 
+    vowel = case_when(
+      str_detect(item, "i") ~ "i", 
+      str_detect(item, "e") ~ "e", 
+      str_detect(item, "a") ~ "a", 
+      str_detect(item, "o") ~ "o", 
+      str_detect(item, "u") ~ "u"
+    )
   )
 
-# Check the result
-table(my_data$group)
+# If you need to convert from wide to long format for vowel formants:
+# df_long <- df %>%
+#   pivot_longer(cols = c(f1, f2, f3), 
+#                names_to = "formant", 
+#                values_to = "hz")
+
+# If you need separate variables for consonant and vowel:
+# df <- df %>%
+#   mutate(
+#     consonant = str_extract(item, "[ptk]"),
+#     vowel = str_extract(item, "[aeiou]")
+#   )
 ```
-
-    ## 
-    ##  Bilingual L2_Learner 
-    ##        135        134
-
-``` r
-table(my_data$participant)
-```
-
-    ## 
-    ## bi01 bi02 bi03 ne01 ne02 ne03 
-    ##   45   45   45   45   44   45
-
-``` r
-table(my_data$vowel)
-```
-
-    ## 
-    ## error 
-    ##     1
-
-``` r
-# View summary
-glimpse(my_data)
-```
-
-    ## Rows: 269
-    ## Columns: 9
-    ## $ fileID      <chr> "bi01_kaka", "bi01_kaka1", "bi01_kaka2", "bi01_keke", "bi0…
-    ## $ f1          <dbl> 650.90, 714.32, 709.19, 495.24, 893.01, 579.31, 823.90, 34…
-    ## $ f2          <dbl> 1637.02, 1567.58, 1560.03, 2168.42, 2152.98, 2339.40, 2711…
-    ## $ vot         <dbl> 24.81, 25.49, 28.29, 31.55, 32.39, 32.87, 18.54, 52.80, 50…
-    ## $ notes       <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, "e…
-    ## $ filename    <chr> "bi01.csv", "bi01.csv", "bi01.csv", "bi01.csv", "bi01.csv"…
-    ## $ group       <chr> "Bilingual", "Bilingual", "Bilingual", "Bilingual", "Bilin…
-    ## $ participant <chr> "bi01", "bi01", "bi01", "bi01", "bi01", "bi01", "bi01", "b…
-    ## $ vowel       <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, "e…
 
 # Analysis
 
@@ -175,7 +85,7 @@ glimpse(my_data)
 
 ``` r
 # VOT descriptive statistics by group
-vot_stats <- my_data %>%
+vot_stats <- df %>%
   group_by(group) %>%
   summarise(
     n = n(),
@@ -190,44 +100,43 @@ kable(vot_stats,
       caption = "VOT Descriptive Statistics by Speaker Group")
 ```
 
-| group      |   n | mean_vot | sd_vot | min_vot | max_vot |
-|:-----------|----:|---------:|-------:|--------:|--------:|
-| Bilingual  | 135 |    29.85 |  16.26 |   10.16 |  167.71 |
-| L2_Learner | 134 |    42.75 |  13.05 |   11.00 |   90.42 |
+| group     |   n | mean_vot | sd_vot | min_vot | max_vot |
+|:----------|----:|---------:|-------:|--------:|--------:|
+| bilingual | 133 |    29.77 |  16.40 |   10.16 |  167.71 |
+| native_en | 133 |    42.71 |  13.09 |   11.00 |   90.42 |
 
 VOT Descriptive Statistics by Speaker Group
 
 ``` r
-# Check if we have vowel data
-if(sum(!is.na(my_data$vowel) & my_data$vowel != "") > 0) {
-  
-  # Filter clean data for formant analysis
-  my_data_clean <- my_data %>%
-    filter(!is.na(vowel), vowel != "", !is.na(f1), !is.na(f2))
-  
-  # Formant descriptive statistics by group and vowel
-  formant_stats <- my_data_clean %>%
-    group_by(group, vowel) %>%
-    summarise(
-      n = n(),
-      mean_f1 = mean(f1, na.rm = TRUE),
-      sd_f1 = sd(f1, na.rm = TRUE),
-      mean_f2 = mean(f2, na.rm = TRUE),
-      sd_f2 = sd(f2, na.rm = TRUE),
-      .groups = "drop"
-    )
-  
-  kable(formant_stats, 
-        digits = 2,
-        caption = "Formant Descriptive Statistics by Group and Vowel")
-} else {
-  print("No vowel labels found. Check your TextGrid files.")
-}
+# Formant descriptive statistics by group and vowel
+formant_stats <- df %>%
+  group_by(group, vowel) %>%
+  summarise(
+    n = n(),
+    mean_f1 = mean(f1, na.rm = TRUE),
+    sd_f1 = sd(f1, na.rm = TRUE),
+    mean_f2 = mean(f2, na.rm = TRUE),
+    sd_f2 = sd(f2, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+kable(formant_stats, 
+      digits = 2,
+      caption = "Formant Descriptive Statistics by Group and Vowel")
 ```
 
-| group     | vowel |   n | mean_f1 | sd_f1 | mean_f2 | sd_f2 |
-|:----------|:------|----:|--------:|------:|--------:|------:|
-| Bilingual | error |   1 |  231.68 |    NA | 1523.96 |    NA |
+| group     | vowel |   n | mean_f1 |  sd_f1 | mean_f2 |  sd_f2 |
+|:----------|:------|----:|--------:|-------:|--------:|-------:|
+| bilingual | a     |  27 |  846.31 | 332.79 | 1673.69 | 258.82 |
+| bilingual | e     |  26 |  646.81 | 281.42 | 2164.94 | 250.08 |
+| bilingual | i     |  27 |  528.81 | 346.25 | 2413.20 | 400.98 |
+| bilingual | o     |  26 |  601.88 | 252.11 | 1309.36 | 397.62 |
+| bilingual | u     |  27 |  509.35 | 235.48 | 1251.72 | 532.45 |
+| native_en | a     |  26 |  936.17 | 298.56 | 1855.03 | 263.11 |
+| native_en | e     |  27 |  749.88 | 323.00 | 2221.66 | 336.32 |
+| native_en | i     |  27 |  799.24 | 383.26 | 2443.78 | 398.88 |
+| native_en | o     |  27 |  716.15 | 275.58 | 1403.09 | 403.90 |
+| native_en | u     |  26 |  753.30 | 360.70 | 1547.70 | 512.05 |
 
 Formant Descriptive Statistics by Group and Vowel
 
@@ -235,7 +144,7 @@ Formant Descriptive Statistics by Group and Vowel
 
 ``` r
 # VOT by group
-ggplot(my_data, aes(x = group, y = vot, fill = group)) +
+ggplot(df, aes(x = group, y = vot, fill = group)) +
   geom_boxplot(alpha = 0.7) +
   geom_jitter(width = 0.2, alpha = 0.3) +
   theme_minimal() +
@@ -248,60 +157,22 @@ ggplot(my_data, aes(x = group, y = vot, fill = group)) +
 <img src="README-_files/figure-gfm/plots-1.png" width="672" />
 
 ``` r
-# Only create vowel plots if we have vowel data
-if(sum(!is.na(my_data$vowel) & my_data$vowel != "") > 0) {
-  
-  # Filter clean data
-  my_data_clean <- my_data %>%
-    filter(!is.na(vowel), vowel != "", !is.na(f1), !is.na(f2))
-  
-  # Vowel space plot (F1 vs F2) with vowel labels
-  print(ggplot(my_data_clean, aes(x = f2, y = f1, color = vowel, shape = group)) +
-    geom_point(size = 3, alpha = 0.6) +
-    geom_text(aes(label = vowel), hjust = -0.3, vjust = 0.3, 
-              size = 3, show.legend = FALSE) +
-    scale_x_reverse() +
-    scale_y_reverse() +
-    theme_minimal() +
-    labs(title = "Vowel Space: F1 vs F2 by Group",
-         x = "F2 (Hz)",
-         y = "F1 (Hz)",
-         color = "Vowel",
-         shape = "Group"))
-  
-  # Mean vowel positions with labels (cleaner visualization)
-  vowel_means <- my_data_clean %>%
-    group_by(group, vowel) %>%
-    summarise(
-      mean_f1 = mean(f1, na.rm = TRUE),
-      mean_f2 = mean(f2, na.rm = TRUE),
-      .groups = "drop"
-    )
-  
-  print(ggplot(vowel_means, aes(x = mean_f2, y = mean_f1, color = vowel, shape = group)) +
-    geom_point(size = 5, alpha = 0.8) +
-    geom_text(aes(label = vowel), hjust = -0.3, vjust = 0.3, 
-              size = 5, fontface = "bold", show.legend = FALSE) +
-    scale_x_reverse() +
-    scale_y_reverse() +
-    theme_minimal() +
-    labs(title = "Mean Vowel Space by Group",
-         x = "F2 (Hz)",
-         y = "F1 (Hz)",
-         color = "Vowel",
-         shape = "Group") +
-    theme(legend.position = "right"))
-  
-} else {
-  print("No vowel data available for vowel space plots.")
-}
+# Vowel space plot (F1 vs F2)
+ggplot(df, aes(x = f2, y = f1, color = vowel, shape = group)) +
+  geom_point(size = 3, alpha = 0.6) +
+  scale_x_reverse() +
+  scale_y_reverse() +
+  theme_minimal() +
+  labs(title = "Vowel Space: F1 vs F2 by Group",
+       x = "F2 (Hz)",
+       y = "F1 (Hz)",
+       color = "Vowel",
+       shape = "Group")
 ```
 
-<img src="README-_files/figure-gfm/plots-2.png" width="672" /><img src="README-_files/figure-gfm/plots-3.png" width="672" />
+<img src="README-_files/figure-gfm/plots-2.png" width="672" />
 
-<!-- Praat figure example -->
-
-**Figure 1**: Example acoustic analysis from Praat
+Figure 1: Example acoustic analysis from Praat
 
 <img src="figs/praat_spectrogram.png" width="80%" style="display: block; margin: auto;" />
 
@@ -309,129 +180,111 @@ if(sum(!is.na(my_data$vowel) & my_data$vowel != "") > 0) {
 
 ``` r
 # Test for VOT differences between groups
-vot_model <- lm(vot ~ group, data = my_data)
+vot_model <- lm(vot ~ group, data = df)
 summary(vot_model)
 ```
 
     ## 
     ## Call:
-    ## lm(formula = vot ~ group, data = my_data)
+    ## lm(formula = vot ~ group, data = df)
     ## 
     ## Residuals:
     ##     Min      1Q  Median      3Q     Max 
-    ## -31.747  -8.950  -2.077   6.793 137.860 
+    ## -31.712  -9.005  -2.076   6.836 137.940 
     ## 
     ## Coefficients:
-    ##                 Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)       29.850      1.269  23.519  < 2e-16 ***
-    ## groupL2_Learner   12.897      1.798   7.172 7.28e-12 ***
+    ##                Estimate Std. Error t value Pr(>|t|)    
+    ## (Intercept)      29.770      1.287  23.139  < 2e-16 ***
+    ## groupnative_en   12.942      1.819   7.113 1.07e-11 ***
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 14.75 on 267 degrees of freedom
-    ## Multiple R-squared:  0.1615, Adjusted R-squared:  0.1584 
-    ## F-statistic: 51.43 on 1 and 267 DF,  p-value: 7.281e-12
+    ## Residual standard error: 14.84 on 264 degrees of freedom
+    ## Multiple R-squared:  0.1608, Adjusted R-squared:  0.1576 
+    ## F-statistic: 50.59 on 1 and 264 DF,  p-value: 1.067e-11
 
 ``` r
 # Alternative: t-test for VOT
-# vot_test <- t.test(vot ~ group, data = my_data)
+# vot_test <- t.test(vot ~ group, data = df)
 # print(vot_test)
 
-# Check vowel data
-print("Checking vowel data:")
-```
-
-    ## [1] "Checking vowel data:"
-
-``` r
-print(table(my_data$vowel, useNA = "always"))
+# Test for formant differences (F1)
+f1_model <- lm(f1 ~ group * vowel, data = df)
+summary(f1_model)
 ```
 
     ## 
-    ## error  <NA> 
-    ##     1   268
+    ## Call:
+    ## lm(formula = f1 ~ group * vowel, data = df)
+    ## 
+    ## Residuals:
+    ##    Min     1Q Median     3Q    Max 
+    ## -623.3 -200.6  -92.3  226.1 1171.9 
+    ## 
+    ## Coefficients:
+    ##                       Estimate Std. Error t value Pr(>|t|)    
+    ## (Intercept)             846.31      60.13  14.074  < 2e-16 ***
+    ## groupnative_en           89.87      85.86   1.047 0.296214    
+    ## vowele                 -199.50      85.86  -2.324 0.020928 *  
+    ## voweli                 -317.50      85.04  -3.733 0.000233 ***
+    ## vowelo                 -244.43      85.86  -2.847 0.004772 ** 
+    ## vowelu                 -336.95      85.04  -3.962 9.64e-05 ***
+    ## groupnative_en:vowele    13.21     121.42   0.109 0.913456    
+    ## groupnative_en:voweli   180.56     120.84   1.494 0.136366    
+    ## groupnative_en:vowelo    24.40     121.42   0.201 0.840883    
+    ## groupnative_en:vowelu   154.08     121.42   1.269 0.205589    
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+    ## 
+    ## Residual standard error: 312.5 on 256 degrees of freedom
+    ## Multiple R-squared:  0.1531, Adjusted R-squared:  0.1234 
+    ## F-statistic: 5.144 on 9 and 256 DF,  p-value: 2.045e-06
 
 ``` r
-print(paste("Number of unique vowels:", length(unique(my_data$vowel[!is.na(my_data$vowel)]))))
+# Test for formant differences (F2)
+f2_model <- lm(f2 ~ group * vowel, data = df)
+summary(f2_model)
 ```
 
-    ## [1] "Number of unique vowels: 1"
-
-``` r
-# Try to run formant models with error handling
-tryCatch({
-  
-  # Check if vowel column exists and has data
-  if("vowel" %in% colnames(my_data)) {
-    
-    # Filter out missing or empty vowels
-    my_data_clean <- my_data %>%
-      filter(!is.na(vowel), !is.na(f1), !is.na(f2), vowel != "")
-    
-    print(paste("Rows in cleaned data:", nrow(my_data_clean)))
-    print(paste("Unique vowels in cleaned data:", paste(unique(my_data_clean$vowel), collapse=", ")))
-    print(paste("Number of unique vowels:", length(unique(my_data_clean$vowel))))
-    
-    # Need at least 2 different vowels for the model
-    if(nrow(my_data_clean) > 10 && length(unique(my_data_clean$vowel)) >= 2) {
-      
-      # Test for formant differences (F1)
-      print("Running F1 model...")
-      f1_model <- lm(f1 ~ group * vowel, data = my_data_clean)
-      print(summary(f1_model))
-      
-      # Test for formant differences (F2)
-      print("Running F2 model...")
-      f2_model <- lm(f2 ~ group * vowel, data = my_data_clean)
-      print(summary(f2_model))
-      
-    } else if(length(unique(my_data_clean$vowel)) < 2) {
-      print(paste("ERROR: Only", length(unique(my_data_clean$vowel)), "unique vowel found."))
-      print("You need at least 2 different vowels to run the vowel analysis.")
-      print("This means your TextGrid files don't have vowel labels on tier 4.")
-      print("Please add vowel labels (a, e, i, o, u) to tier 4 in Praat and re-extract the data.")
-    } else {
-      print("Not enough data rows for analysis.")
-    }
-    
-  } else {
-    print("Vowel column not found.")
-  }
-  
-}, error = function(e) {
-  print(paste("Error in formant analysis:", e$message))
-  print("Your TextGrid files likely don't have vowel labels.")
-  print("Add vowel labels to tier 4 in Praat, then re-run the Praat script.")
-})
-```
-
-    ## [1] "Rows in cleaned data: 1"
-    ## [1] "Unique vowels in cleaned data: error"
-    ## [1] "Number of unique vowels: 1"
-    ## [1] "ERROR: Only 1 unique vowel found."
-    ## [1] "You need at least 2 different vowels to run the vowel analysis."
-    ## [1] "This means your TextGrid files don't have vowel labels on tier 4."
-    ## [1] "Please add vowel labels (a, e, i, o, u) to tier 4 in Praat and re-extract the data."
+    ## 
+    ## Call:
+    ## lm(formula = f2 ~ group * vowel, data = df)
+    ## 
+    ## Residuals:
+    ##     Min      1Q  Median      3Q     Max 
+    ## -997.59 -269.38  -35.08  257.86 1129.13 
+    ## 
+    ## Coefficients:
+    ##                       Estimate Std. Error t value Pr(>|t|)    
+    ## (Intercept)            1673.69      74.55  22.451  < 2e-16 ***
+    ## groupnative_en          181.34     106.44   1.704 0.089646 .  
+    ## vowele                  491.25     106.44   4.615 6.21e-06 ***
+    ## voweli                  739.51     105.43   7.014 2.06e-11 ***
+    ## vowelo                 -364.33     106.44  -3.423 0.000721 ***
+    ## vowelu                 -421.97     105.43  -4.002 8.21e-05 ***
+    ## groupnative_en:vowele  -124.62     150.53  -0.828 0.408492    
+    ## groupnative_en:voweli  -150.76     149.81  -1.006 0.315209    
+    ## groupnative_en:vowelo   -87.61     150.53  -0.582 0.561046    
+    ## groupnative_en:vowelu   114.64     150.53   0.762 0.446981    
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+    ## 
+    ## Residual standard error: 387.4 on 256 degrees of freedom
+    ## Multiple R-squared:  0.5663, Adjusted R-squared:  0.5511 
+    ## F-statistic: 37.14 on 9 and 256 DF,  p-value: < 2.2e-16
 
 # Conclusion
 
-<!-- 
-Revisit your hypotheses (refer to plots, figures, tables, statistical tests, 
-etc.)
-Reflect on the entire process. 
-What did you enjoy? What did you hate? What did you learn? 
-What would you do differently?
--->
-
-Overall, the results partially supported the hypothesis that bilingual
-speakers would produce more target-like Spanish patterns than L2
-learners, with bilinguals generally showing shorter and more consistent
-VOT values and clearer vowel spaces. L2 learners showed greater
-variability and, in some cases, more English-like patterns in both VOT
-and vowel quality. This project was more challenging than expected due
-to repeated coding errors, issues with the vowel data, and the need to
-rely on ChatGPT and google to help with R. However, despite the
-frustration, and many hours of segmentation and having to walk away from
-my computer, the experience highlighted how much real research involves
-troubleshooting and taught me the importance of just pushing through and
-learning from my mistakes ( I deleted my code like 6 times.) </br></br>
+In conclusion, the results partially supported the hypothesis that
+bilingual speakers would produce more target-like Spanish patterns than
+L2 learners, with bilinguals generally showing shorter and more
+consistent VOT values and clearer vowel spaces. L2 learners showed
+greater variability and, in some cases, more English-like patterns in
+both VOT and vowel quality. This project was more challenging than
+expected due to repeated coding errors, issues with the vowel data, and
+the need to rely on ChatGPT and google to help with R. However, despite
+the frustration, and many hours of segmentation and having to walk away
+from my computer, the experience highlighted how much real research
+involves troubleshooting and taught me the importance of just pushing
+through and learning from my mistakes (I deleted my code like 6 times.)
+</br></br>
